@@ -5,11 +5,18 @@ import re
 def compareTables(table_one, table_two, outFile):
     table_one
 
+def checkAdmin(username):
+    m = re.search('[aA]dmin')
+    return username == 'Administrator' or username == "System"
 
 def filterSingle(row, list):
     username = row[1]
     computername = row[0]
     lastLicenseEntry = list[-1]
+
+
+    if username == 'Administrator' or username == "System":
+        return False
 
     if lastLicenseEntry[1] == username and lastLicenseEntry[0] == computername:
         return False
@@ -22,7 +29,6 @@ def filterMulti(row, list):
     computername = row[0]
     lastLicenseEntry = list[-1]
 
-    if username==''
     if lastLicenseEntry[1] == username and lastLicenseEntry[0] == computername:
         return False
     else:
