@@ -1,31 +1,55 @@
 import csv
 import re
+import cProfile
 
 
-def compareTables(table_one, table_two, outFile):
-    table_one
+# compares two tables to filter out lab machines from single user machines
+def compareTables(table_one, table_two):
+    with open(table_one, 'r', newline='') as t1, open(table_two, 'r', newline='') as t2:
+        t1Reader = csv.reader(t1, delimiter=',')
+        t2Reader = csv.reader(t2, delimiter=',')
 
+        t1List = list(t1Reader)
+        t2List = list(t2Reader)
+
+        if (len(t1List) > len(t2List)):
+            compared_list = [license for license in t1List if license not in t2List]
+        else:
+            compared_list = [license for license in t2List if license not in t1List]
+
+    getLicences = writeCSV(compared_list)
+
+    single_list = getLicences[0]
+    multi_list = getLicences[1]
+
+    LicenseWriter(single_list)
+    LicenseWriter(multi_list)
+
+def macTableProcessing(inFile):
+    inFile
 
 def checkAdmin(username):
     m = re.match('^[A-a]dmin.*$|^[S-s]ystem.*$', username)
     return m
 
-
-def filterSingle(row, list):
+#checks current entry to see if it is a single license user
+def filterSingle(row, currentList):
     username = row[1]
-    computername = row[0]
-    lastLicenseEntry = list[-1]
-
-    if lastLicenseEntry[1] == username and lastLicenseEntry[0] == computername or checkAdmin(username):
-        return True
-    else:
+    if (checkAdmin(username)):
         return False
+    computername = row[0]
+    lastLicenseEntry = currentList[-1]
 
+    if lastLicenseEntry[1] == username and lastLicenseEntry[0] == computername:
+        return False
+    else:
+        return True
 
-def filterMulti(row, list):
+#checks current entry to see if it is a serializable license
+def filterMulti(row, currentList):
     username = row[1]
     computername = row[0]
-    lastLicenseEntry = list[-1]
+    lastLicenseEntry = currentList[-1]
 
     if lastLicenseEntry[0] == computername and lastLicenseEntry[1] != username:
         return True
@@ -33,44 +57,53 @@ def filterMulti(row, list):
         return False
 
 
+# checks for single use and serialized machines
+# must contain column headers to function properly
 def writeCSV(inFile):
-    list = []
-    singleLicense = 0
-    multiLicense = 0
-    with open('TestSingle.csv', 'w', newline='') as single_file, open(inFile, 'r', newline='') as csv_file, open(
-            'TestMulti.csv', 'w', newline='') as multi_file:
-        singleWriter = csv.writer(single_file, delimiter=',', escapechar='')
-        multiWriter = csv.writer(multi_file, delimiter=',', escapechar='')
-        reader = csv.reader(csv_file, delimiter=',')
+    single_list = []
+    multi_list = []
 
-        singleWriter.writerow(next(reader))
-        # gives single use number
-        for row in reader:
-            if len(list) == 0:
-                singleLicense += 1
-                list.append(row)
+    for row in inFile:
+        if len(single_list) == 0:
+            single_list.insert(0, row)
+            multi_list.insert(0, [row[0]])
+            continue
 
-            isSingle = filterSingle(row, list)
+        isSingle = filterSingle(row, single_list)
 
-            if (isSingle):
-                isMulti = filterMulti(row, list)
-                if (isMulti):
-                    multiWriter.writerow(row)
-                    multiLicense+=1
-                continue
+        if (isSingle):
+            if (filterMulti(row, single_list)):
+                multi_list.append([single_list[-1][0]])
+                single_list.remove(single_list[-1])
+                multi_list.append([row[0]])
             else:
-                isMulti = filterMulti(row, list)
-                if (isMulti):
-                    multiWriter.writerow(row)
-                    multiLicense+=1
-                    continue
-                else:
-                    singleLicense += 1
-                    list.append(row)
-        for item in list:
-            singleWriter.writerow(item)
-        print("Number of single use licenses: " + str(singleLicense))
-        print("Number of serializeable use licenses: " + str(multiLicense))
+                single_list.append(row)
+        else:
+            multi_list.append([single_list[-1][0]])
+            single_list.remove(single_list[-1])
+            multi_list.append([row[0]])
+        continue
+
+    single_list.append("Single")
+    multi_list.append("Serialized")
+
+    return (single_list, removeDuplicates(multi_list))
+
+#removes duplicate entries from lists before writing to file
+def removeDuplicates(duplicate):
+    final_list = []
+    for name in duplicate:
+        if name not in final_list:
+            final_list.append(name)
+    return final_list
+
+#writes user or machine entries into files
+def LicenseWriter(inputCSV):
+    with open(inputCSV[-1] + 'License.csv', 'w', newline='') as file:
+        singleWriter = csv.writer(file, delimiter=',', escapechar='')
+
+        for line in inputCSV:
+            singleWriter.writerow(line)
 
 
-writeCSV("TestCSV.csv")
+cProfile.run('compareTables("ComparedTableTest2.csv", "ComparedTableTest.csv")')
