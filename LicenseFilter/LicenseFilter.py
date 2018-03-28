@@ -87,7 +87,7 @@ def writeCSV(inFile):
     single_list.append("Single")
     multi_list.append("Serialized")
 
-    return (single_list, removeDuplicates(multi_list))
+    return (removeDuplicates(single_list), removeDuplicates(multi_list))
 
 #removes duplicate entries from lists before writing to file
 def removeDuplicates(duplicate):
