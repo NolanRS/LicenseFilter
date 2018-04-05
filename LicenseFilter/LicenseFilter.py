@@ -1,11 +1,15 @@
 import csv
 import re
-import cProfile
+from tkinter import *
+from tkinter import filedialog
 
+sccmFile = ''
+adobeFile = ''
 
 def checkAdmin(username):
     m = re.match('^[A-a]dmin.*$|^[S-s]ystem.*$', username)
     return m
+
 
 # checks to see if the email from Adobe.com matches the username from SCCM
 
@@ -21,21 +25,29 @@ def checkEmail(email, username):
 
 
 # checks current entry to see if it is a single license user
-def filterSingle(row, currentList):
+def checkSingle(row, currentList):
     username = row[1].lower()
     if (checkAdmin(username)):
         return False
     computername = row[0]
     lastLicenseEntry = currentList[-1]
 
-    if lastLicenseEntry[1] == username and lastLicenseEntry[0] == computername:
-        return True
-    else:
-        return False
+    contains = True
+
+    for line in currentList:
+        checkComp = line[0]
+        checkName = line[1]
+        if 'Adobe' in checkComp:
+            if checkName == username:
+                contains = False
+        elif checkComp == username and checkName == computername:
+            contains = False
+
+    return contains
 
 
 # checks current entry to see if it is a serializable license
-def filterMulti(row, currentList):
+def checkMulti(row, currentList):
     username = row[1].lower()
     computername = row[0]
     lastLicenseEntry = currentList[-1]
@@ -45,6 +57,7 @@ def filterMulti(row, currentList):
     else:
         return False
 
+
 # removes duplicate entries from lists before writing to file
 def removeDuplicates(duplicate):
     final_list = []
@@ -52,6 +65,7 @@ def removeDuplicates(duplicate):
         if name not in final_list:
             final_list.append(name)
     return final_list
+
 
 def tableProcessing(inFile):
     with open(inFile, 'r', newline='') as full_table:
@@ -75,10 +89,10 @@ def compareSingleLicenses(currentUsers, dataUsers, multiUsers):
     stored_licensed = dataUsers
     serializedUsers = multiUsers
 
-    #loop through a list with users currently under a single license
+    # loop through a list with users currently under a single license
     for element in currently_licensed:
         email = element[1]
-        #loop through the list of unlicensed users according to sccm
+        # loop through the list of unlicensed users according to sccm
         for entry in stored_licensed:
             username = entry[1]
             if (checkEmail(email, username) == False):
@@ -92,37 +106,30 @@ def compareSingleLicenses(currentUsers, dataUsers, multiUsers):
 # checks for single use and serialized machines
 # currently must not contain column headers to function properly
 def csvToList(inFile):
-    single_list = []
-    multi_list = []
-    #loops through the file/list
+    shortHandList = []
+    single = []
+    multi = []
     for row in inFile:
-        #checks to make sure that any entries with an empty computer name field are skipped
-        if (row[0] != ''):
-            if len(single_list) == 0:
-                single_list.insert(0, [row[0]]+[row[1]])
-                multi_list.insert(0, [row[0]])
-                continue
+        shortHandList.append([row[0]] + [row[1]])
 
-            #check to see if the user being checked has already been added
-            isSingle = filterSingle(row, single_list)
-
-            #if the list does not already contain the current entry
-            if (isSingle):
-                #check to see if it is a machine that has multiple users
-                if (filterMulti(row, single_list)):
-                    multi_list.append([single_list[-1][0]])
-                    single_list.remove(single_list[-1])
-                    multi_list.append([row[0]])
+    shortHandList = removeDuplicates(shortHandList)
+    for index, line in enumerate(shortHandList):
+        if (index == len(shortHandList) - 1):
+            break
+        print(line)
+        elToCheck = shortHandList[index + 1]
+        if(checkAdmin(line[1])):
+            continue
+        if elToCheck != line:
+            if elToCheck[0] == line[0] and elToCheck[1] != line[1]:
+                if line[0] not in multi:
+                    multi.append(line[0])
             else:
-                #check to see if it is a machine that has multiple users
-                multi_list.append([single_list[-1][0]])
-                single_list.remove(single_list[-1])
-                multi_list.append([row[0]])
-            continue
-        else:
-            continue
+                if line[0] not in multi:
+                    single.append(line)
 
-    return (removeDuplicates(single_list), removeDuplicates(multi_list))
+    return (single, multi)
+
 
 # accepts two lists and creates a merged copy of the two
 # used for taking a list of users that need a single license and a list with serializable licenses
@@ -139,11 +146,61 @@ def mergedSingleWriter(singleCSV, multiCSV):
         singleWriter.writerow(["Serializable Licenses"])
         singleWriter.writerow(["Number of Serializable Licenses:" + str(len(multiCSV))])
         for line in multiCSV:
-            singleWriter.writerow(line)
+            singleWriter.writerow([line])
+
+def selectSccmFile():
+    ftypes = [("CSV files", '*.csv')]
+    global sccmFile
+    sccmFile = filedialog.askopenfilename(initialdir = '/',title="Select file", filetypes = ftypes)
+    sccmEntry.delete(0, END)
+    sccmEntry.insert(0, sccmFile)
+
+def selectAdobeFile():
+    ftypes = [("CSV files", '*.csv')]
+    global adobeFile
+    adobeFile = filedialog.askopenfilename(initialdir = '/',title="Select file", filetypes = ftypes)
+    adobeEntry.delete(0, END)
+    adobeEntry.insert(0, adobeFile)
+
+def run():
+    licensed = tableProcessing(adobeFile)
+    notLicensed = tableProcessing(sccmFile)
+
+    compareSingleLicenses(licensed[0], notLicensed[0], notLicensed[1])
+
+root = Tk()
+
+root.title('License Filter')
+root.configure(background='white')
+root.minsize(width=650, height=150)
+root.maxsize(width=650, height=150)
+w = root.winfo_screenwidth()
+h = root.winfo_screenheight()
+size = tuple(int(pos) for pos in root.geometry().split('+')[0].split('x'))
+x = w/2 - size[0]/2
+y = h/2 - size[1]/2
+root.geometry("%dx%d+%d+%d" % (size + (x, y)))
+
+sccmLabel = Label(root, text = "SCCM List",bg="white")
+adobeLabel = Label(root, text = "Adobe List",bg="white")
+
+sccmButton = Button(root,text='SCCM License File',width=20,command=selectSccmFile)
+adobeButton = Button(root,text='Adobe License File',width=20,command=selectAdobeFile)
+runButton = Button(root,text='Run',width=20,bg='red',command=run)
+
+sccmEntry = Entry(root,width=65,textvariable=sccmFile)
+adobeEntry = Entry(root,width=65,textvariable=adobeFile)
+
+sccmLabel.grid(row=0)
+adobeLabel.grid(row=1)
+
+adobeButton.grid(row=1,column=1,padx=(10,10))
+sccmButton.grid(row=0,column=1)
+runButton.place(relx=0.5, rely=0.6, anchor=CENTER)
+
+sccmEntry.grid(row=0,column=2)
+adobeEntry.grid(row=1,column=2)
 
 
+root.mainloop()
 
-licensed = tableProcessing("Current Users Licensed to Adobe CC.csv")
-notLicensed = tableProcessing("SCCMAdobeList.csv")
-
-compareSingleLicenses(licensed[0], notLicensed[0], notLicensed[1])
